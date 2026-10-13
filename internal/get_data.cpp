@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cmath>
 
-struct ColorByte {  // ColorByte contains every color parameter for pixel
+struct ColorPixel {  // ColorByte contains every color parameter for pixel
     uint8_t blue = 0;
     uint8_t green = 0;
     uint8_t red = 0;
@@ -15,22 +15,20 @@ class BMPData {
     private:
         int32_t width = 0;  // width of picture
         int32_t hight = 0;  // hight of picture
-        int32_t offset = 0;    // space before first pixel data from first byte
-        int16_t bit_depth = 0;  // color depth
-        std::vector<ColorByte> pixels; // data about every pixel
-        // временно пихнул вектор, потом поменяем, если его нельзя юзать
-        // возможно вынесу сюда ещё несколько параметров, как офсет или ещё что-нибудь, но надо будет подредачить Read()
+        uint16_t bit_depth = 0;  // color depth
+        std::vector<ColorPixel> pixels; // data about every pixel
     public:
         void Read(const char* filename) { // method reads .bmp file
             FILE* file = fopen(filename, "rb");
-
+            
             if (!file) {
                 std::cout << "Cannot open file!" << std::endl;
                 return;
             }
-
+            
+            uint32_t offset = 0;    // space before first pixel data from first byte
             std::fseek(file, 10, SEEK_SET);
-            std::memcpy(&(*this).offset, file, 4);
+            std::memcpy(&offset, file, 4);
 
             if (std::fseek(file, 14, SEEK_SET) != 0) {
                 std::cout << "Cannot relocate pointer after fileheader!" << std::endl;
@@ -48,14 +46,14 @@ class BMPData {
             std::memcpy(&(*this).width, &info_header[4], 4);   // getting width, higth and bit_depth from INFOHEADER
             std::memcpy(&(*this).hight, &info_header[8], 4);
             std::memcpy(&(*this).bit_depth, &info_header[14], 2);
-            std::fseek(file, (*this).offset, SEEK_SET);    // relocate pointer to first pixel
+            std::fseek(file, offset, SEEK_SET);    // relocate pointer to first pixel
 
-            int32_t pixels_in_row = ((*this).width * (*this).bit_depth + 7) / 8 / 3; // pixels in row
-            int32_t pixel_pos = 0;  // point pixel which are proccessing
-            int32_t padding_in_row = 0;
+            uint32_t pixels_in_row = (abs((*this).width) * (*this).bit_depth + 7) / 8 / 3; // pixels in row
+            uint32_t pixel_pos = 0;  // point pixel which are proccessing
+            uint32_t padding_in_row = 0;
             bool is_bottom_up = false;
 
-            std::vector<ColorByte> color_pixels(pixels_in_row * (*this).hight);
+            std::vector<ColorPixel> color_pixels(pixels_in_row * (*this).hight);
             uint8_t pixel[3];
             bytes_read = fread(&pixel, 1, 3, file);
 
@@ -72,7 +70,7 @@ class BMPData {
             }
 
             while (bytes_read == 3) {   // read pixels until the end
-                ColorByte cur_pixel = {pixel[0], pixel[1], pixel[2]};
+                ColorPixel cur_pixel = {pixel[0], pixel[1], pixel[2]};
                 color_pixels[pixel_pos] = cur_pixel;
 
                 if (is_bottom_up) {
@@ -92,12 +90,18 @@ class BMPData {
             fclose(file);
             return;
         };
-        BMPData Create() { // method create .bmp file with parameters from class
-            int32_t headers_size = 14 + 40;
-            int32_t pallet_size = 4 * (int) pow(2, (*this).bit_depth);
-            int32_t row_size = (((*this).bit_depth * (*this).width + 31) / 32) * 4;
-            int32_t file_size = headers_size + pallet_size + row_size * abs((*this).hight);
-            int32_t offset = headers_size + pallet_size;
+        void Create(char* filename, uint32_t ppm) { // method create .bmp file with parameters from class
+            uint32_t headers_size = 14 + 40;
+            uint32_t pallet_size = 0;
+
+            if ((*this).bit_depth <= 8) {
+                pallet_size = 4 * (int) pow(2, (*this).bit_depth);
+            }
+
+            uint32_t row_size = (((*this).bit_depth * abs((*this).width) + 31) / 32) * 4;
+            uint32_t file_size = headers_size + pallet_size + row_size * abs((*this).hight);
+            uint32_t pixels_in_row = (abs((*this).width) * (*this).bit_depth + 7) / 8 / 3;
+            uint32_t offset = headers_size + pallet_size;
             uint8_t new_file_bytes[file_size];
 
             new_file_bytes[0] = 0x42;
@@ -114,6 +118,10 @@ class BMPData {
                 new_file_bytes[22 + i] = ((*this).hight >> 8 * i) & 0xFF;
                 new_file_bytes[30 + i] = 0;
                 new_file_bytes[34 + i] = 0;
+                new_file_bytes[38 + i] = (ppm >> 8 * i) & 0xFF;
+                new_file_bytes[42 + i] = (ppm >> 8 * i) & 0xFF;
+                new_file_bytes[46 + i] = 0;
+                new_file_bytes[50 + i] = 0;
             }
 
             for (int i = 0; i < 3; i++) {
@@ -124,6 +132,42 @@ class BMPData {
                 new_file_bytes[28] = ((*this).bit_depth >> 8 * i) & 0xFF;
             }
 
-            //осталось заполнить последние 4 поля
+            if (pallet_size > 0) {
+                for (int i = 0; i < pallet_size / 4; i++) {
+                    for (int blue = 0; blue < 256; blue++) {
+                        for (int green = 0; green < 256; green++) {
+                            for (int red = 0; red < 256; red++) {
+                                new_file_bytes[54 + i * 4] = blue;
+                                new_file_bytes[55 + i * 4] = green;
+                                new_file_bytes[56 + i * 4] = red;
+                            }
+                        }
+                    }
+
+                    new_file_bytes[57 + i * 4] = 0;
+                }
+            }
+
+            for (int row = 0; row < (*this).hight; row++) {
+                for (int cur_pixel = 0; cur_pixel < pixels_in_row; cur_pixel++) {
+                    new_file_bytes[offset + row_size * row + cur_pixel] = (*this).pixels[pixels_in_row * row + cur_pixel].blue;
+                    new_file_bytes[offset + row_size * row + cur_pixel + 1] = (*this).pixels[pixels_in_row * row + cur_pixel].green;
+                    new_file_bytes[offset + row_size * row + cur_pixel + 2] = (*this).pixels[pixels_in_row * row + cur_pixel].red;
+                }
+
+                for (int padding = 0; padding < row_size - pixels_in_row * 3; padding++) {
+                    new_file_bytes[offset + row_size * row + pixels_in_row + padding] = 0;
+                }
+            }
+
+            FILE* file = fopen(filename, "wb");
+
+            if (!file) {
+                std::cout << "Cannot create file!" << std::endl;
+                return;
+            }
+
+            std::fwrite(&new_file_bytes[0], 1, file_size, file);
+            std::fclose(file);
         };
 };
