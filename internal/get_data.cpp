@@ -22,7 +22,7 @@ void ReverseRow(std::vector <ColorPixel> &pixels, int l, int r) {
 class BMPData {
     private:
         int32_t width = 0;  // width of picture
-        int32_t hight = 0;  // hight of picture
+        int32_t height = 0;  // height of picture
         uint16_t bit_depth = 0;  // color depth
         std::vector<ColorPixel> pixels; // data about every pixel
     public:
@@ -52,7 +52,7 @@ class BMPData {
             }
 
             std::memcpy(&(*this).width, &info_header[4], 4);   // getting width, higth and bit_depth from INFOHEADER
-            std::memcpy(&(*this).hight, &info_header[8], 4);
+            std::memcpy(&(*this).height, &info_header[8], 4);
             std::memcpy(&(*this).bit_depth, &info_header[14], 2);
             std::fseek(file, offset, SEEK_SET);    // relocate pointer to first pixel
 
@@ -61,7 +61,7 @@ class BMPData {
             uint32_t padding_in_row = 0;
             bool is_bottom_up = false;
 
-            this->pixels = std::vector<ColorPixel> (pixels_in_row * abs((*this).hight));
+            this->pixels = std::vector<ColorPixel> (pixels_in_row * abs((*this).height));
             std::vector<ColorPixel>& color_pixels = this->pixels;
             uint8_t pixel[3];
             bytes_read = fread(&pixel, 1, 3, file);
@@ -71,12 +71,12 @@ class BMPData {
                 padding_in_row = 4 - ((pixels_in_row * 3) % 4);
             }
 
-            if ((*this).hight > 0) {
+            if ((*this).height > 0) {
                 is_bottom_up = true;
             }
 
             if (is_bottom_up) {
-                pixel_pos = pixels_in_row * (*this).hight - 1;
+                pixel_pos = pixels_in_row * (*this).height - 1;
             }
 
             while (bytes_read == 3) {   // read pixels until the end
@@ -111,42 +111,36 @@ class BMPData {
             uint32_t headers_size = 14 + 40;
             uint32_t pallet_size = 0;
 
+            if (this->height > 0) {
+                this->height = -this->height;
+            }
+
             if ((*this).bit_depth <= 8) {
                 pallet_size = 4 * (int) pow(2, (*this).bit_depth);
             }
 
             uint32_t row_size = (((*this).bit_depth * abs((*this).width) + 31) / 32) * 4;
-            uint32_t file_size = headers_size + pallet_size + row_size * abs((*this).hight);
+            uint32_t file_size = headers_size + pallet_size + row_size * abs((*this).height);
             uint32_t pixels_in_row = abs(this->width);
             uint32_t offset = headers_size + pallet_size;
-            uint8_t new_file_bytes[file_size];
+            std::vector<uint8_t> new_file_bytes(file_size, 0);
 
             new_file_bytes[0] = 0x42;
             new_file_bytes[1] = 0x4D;
             new_file_bytes[14] = 0x28;
             new_file_bytes[26] = 1;
-            new_file_bytes[27] = 0;
 
             for (int i = 0; i < 4; i++) {
                 new_file_bytes[2 + i] = (file_size >> 8 * i) & 0xFF;
-                new_file_bytes[6 + i] = 0;
                 new_file_bytes[10 + i] = (offset >> 8 * i) & 0xFF;
                 new_file_bytes[18 + i] = ((*this).width >> 8 * i) & 0xFF;
-                new_file_bytes[22 + i] = ((*this).hight >> 8 * i) & 0xFF;
-                new_file_bytes[30 + i] = 0;
-                new_file_bytes[34 + i] = 0;
+                new_file_bytes[22 + i] = ((*this).height >> 8 * i) & 0xFF;
                 new_file_bytes[38 + i] = (ppm >> 8 * i) & 0xFF;
                 new_file_bytes[42 + i] = (ppm >> 8 * i) & 0xFF;
-                new_file_bytes[46 + i] = 0;
-                new_file_bytes[50 + i] = 0;
-            }
-
-            for (int i = 0; i < 3; i++) {
-                new_file_bytes[15 + i] = 0;
             }
 
             for (int i = 0; i < 2; i++) {
-                new_file_bytes[28] = ((*this).bit_depth >> 8 * i) & 0xFF;
+                new_file_bytes[28 + i] = ((*this).bit_depth >> 8 * i) & 0xFF;
             }
 
             if (pallet_size > 0) {
@@ -160,20 +154,14 @@ class BMPData {
                             }
                         }
                     }
-
-                    new_file_bytes[57 + i * 4] = 0;
                 }
             }
 
-            for (int row = 0; row < (*this).hight; row++) {
+            for (int row = 0; row < abs(this->height); row++) {
                 for (int cur_pixel = 0; cur_pixel < pixels_in_row; cur_pixel++) {
-                    new_file_bytes[offset + row_size * row + cur_pixel] = (*this).pixels[pixels_in_row * row + cur_pixel].blue;
-                    new_file_bytes[offset + row_size * row + cur_pixel + 1] = (*this).pixels[pixels_in_row * row + cur_pixel].green;
-                    new_file_bytes[offset + row_size * row + cur_pixel + 2] = (*this).pixels[pixels_in_row * row + cur_pixel].red;
-                }
-
-                for (int padding = 0; padding < row_size - pixels_in_row * 3; padding++) {
-                    new_file_bytes[offset + row_size * row + pixels_in_row + padding] = 0;
+                    new_file_bytes[offset + row_size * row + cur_pixel * 3] = (*this).pixels[pixels_in_row * row + cur_pixel].blue;
+                    new_file_bytes[offset + row_size * row + cur_pixel * 3 + 1] = (*this).pixels[pixels_in_row * row + cur_pixel].green;
+                    new_file_bytes[offset + row_size * row + cur_pixel * 3 + 2] = (*this).pixels[pixels_in_row * row + cur_pixel].red;
                 }
             }
 
@@ -187,4 +175,16 @@ class BMPData {
             std::fwrite(&new_file_bytes[0], 1, file_size, file);
             std::fclose(file);
         };
+        void SetParameters(int32_t width, int32_t height, uint16_t bit_depth, std::vector<ColorPixel> &pixels) {
+            if (height > 0) {
+                height = -height;
+            }
+
+            this->width = abs(width);
+            this->height = height;
+            this->bit_depth = bit_depth;
+            this->pixels = pixels;
+        }
+        int32_t GetWidth() { return this->width; };
+        int32_t GetHeight() { return this->height; };
 };
