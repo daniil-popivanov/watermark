@@ -11,6 +11,14 @@ struct ColorPixel {  // ColorByte contains every color parameter for pixel
     uint8_t red = 0;
 };
 
+void ReverseRow(std::vector <ColorPixel> &pixels, int l, int r) {
+    for (int i = 0; i < (r - l) / 2; i++) {
+        ColorPixel tmp = pixels[l + i];
+        pixels[l + i] = pixels[r - (i + 1)];
+        pixels[r - (i + 1)] = tmp;
+    }
+}
+
 class BMPData {
     private:
         int32_t width = 0;  // width of picture
@@ -28,7 +36,7 @@ class BMPData {
             
             uint32_t offset = 0;    // space before first pixel data from first byte
             std::fseek(file, 10, SEEK_SET);
-            std::memcpy(&offset, file, 4);
+            std::fread(&offset, 4, 1, file);
 
             if (std::fseek(file, 14, SEEK_SET) != 0) {
                 std::cout << "Cannot relocate pointer after fileheader!" << std::endl;
@@ -48,17 +56,19 @@ class BMPData {
             std::memcpy(&(*this).bit_depth, &info_header[14], 2);
             std::fseek(file, offset, SEEK_SET);    // relocate pointer to first pixel
 
-            uint32_t pixels_in_row = (abs((*this).width) * (*this).bit_depth + 7) / 8 / 3; // pixels in row
-            uint32_t pixel_pos = 0;  // point pixel which are proccessing
+            uint32_t pixels_in_row = abs(this->width); // pixels in row
+            uint64_t pixel_pos = 0;  // point pixel which are proccessing
             uint32_t padding_in_row = 0;
             bool is_bottom_up = false;
 
-            std::vector<ColorPixel> color_pixels(pixels_in_row * (*this).hight);
+            this->pixels = std::vector<ColorPixel> (pixels_in_row * abs((*this).hight));
+            std::vector<ColorPixel>& color_pixels = this->pixels;
             uint8_t pixel[3];
             bytes_read = fread(&pixel, 1, 3, file);
+            uint32_t pixels_read = 0;
 
-            if (pixels_in_row % 4 != 0) {   // counting padding bytes in a row
-                padding_in_row = 4 - (pixels_in_row % 4);
+            if ((pixels_in_row * 3) % 4 != 0) {   // counting padding bytes in a row
+                padding_in_row = 4 - ((pixels_in_row * 3) % 4);
             }
 
             if ((*this).hight > 0) {
@@ -72,15 +82,22 @@ class BMPData {
             while (bytes_read == 3) {   // read pixels until the end
                 ColorPixel cur_pixel = {pixel[0], pixel[1], pixel[2]};
                 color_pixels[pixel_pos] = cur_pixel;
+                pixels_read++;
 
+                if (pixels_read == pixels_in_row) {
+                    if (is_bottom_up) {
+                        ReverseRow(color_pixels, pixel_pos, pixel_pos + pixels_in_row);
+                    }
+                    
+                    pixels_read = 0;
+                    
+                    std::fseek(file, padding_in_row, SEEK_CUR);
+                }
+                
                 if (is_bottom_up) {
                     pixel_pos--;
                 } else {
                     pixel_pos++;
-                }
-                
-                if (pixel_pos % pixels_in_row == 0) {
-                    std::fseek(file, padding_in_row, SEEK_CUR);
                 }
 
                 bytes_read = fread(&pixel, 1, 3, file);
@@ -90,7 +107,7 @@ class BMPData {
             fclose(file);
             return;
         };
-        void Create(char* filename, uint32_t ppm) { // method create .bmp file with parameters from class
+        void Create(const char* filename, uint32_t ppm) { // method create .bmp file with parameters from class
             uint32_t headers_size = 14 + 40;
             uint32_t pallet_size = 0;
 
@@ -100,7 +117,7 @@ class BMPData {
 
             uint32_t row_size = (((*this).bit_depth * abs((*this).width) + 31) / 32) * 4;
             uint32_t file_size = headers_size + pallet_size + row_size * abs((*this).hight);
-            uint32_t pixels_in_row = (abs((*this).width) * (*this).bit_depth + 7) / 8 / 3;
+            uint32_t pixels_in_row = abs(this->width);
             uint32_t offset = headers_size + pallet_size;
             uint8_t new_file_bytes[file_size];
 
