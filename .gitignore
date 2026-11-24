@@ -68,5 +68,9 @@ vcpkg_installed/
 Testing/
 .cache/
 
+# pyhton code
 __pycache__/
 *.py[cod]
+
+.vscode
+*.bmp
