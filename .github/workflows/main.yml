@@ -1,0 +1,68 @@
+name: "Watermark CI"
+
+on:
+  push:
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Check Python syntax
+        run: python -m compileall -q tests
+
+  test_ubuntu:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BMP_DATA_SOURCE: internal/get_data.cpp
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Run tests
+        run: |
+          python -m unittest tests/test_bmp_data.py
+
+  test_windows:
+    needs: lint
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      BMP_DATA_SOURCE: internal/get_data.cpp
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Run tests
+        run: |
+          python -m unittest tests/test_bmp_data.py
