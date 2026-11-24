@@ -1,4 +1,4 @@
-#include "wmarkplacer/get_data.h"
+#include "include/wmarkplacer/mark_building.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -6,6 +6,16 @@
 #include <vector>
 
 namespace {
+
+double NormalizeAlpha(double alpha) {
+  if (alpha < 0.0) {
+    return 0.0;
+  }
+  if (alpha > 1.0) {
+    return 1.0;
+  }
+  return alpha;
+}
 
 uint8_t BlendChannel(uint8_t orig, uint8_t mark, double alpha) {
   double blended = orig * (1.0 - alpha) + mark * alpha + 0.5;
@@ -18,16 +28,12 @@ uint8_t BlendChannel(uint8_t orig, uint8_t mark, double alpha) {
   return static_cast<uint8_t>(blended);
 }
 
-}  // namespace
+}
 
 bmpformat::ColorPixel BlendPixels(const bmpformat::ColorPixel& orig,
                                   const bmpformat::ColorPixel& mark,
-                                  double alpha = 0.5) {
-  if (alpha < 0.0) {
-    alpha = 0.0;
-  } else if (alpha > 1.0) {
-    alpha = 1.0;
-  }
+                                  double alpha) {
+  alpha = NormalizeAlpha(alpha);
 
   bmpformat::ColorPixel result{};
   result.blue = BlendChannel(orig.blue, mark.blue, alpha);
@@ -36,11 +42,11 @@ bmpformat::ColorPixel BlendPixels(const bmpformat::ColorPixel& orig,
   return result;
 }
 
-bool ApplyWatermarkToGrid(std::vector<bmpformat::ColorPixel>& base_grid,
-                          std::size_t base_w, std::size_t base_h,
-                          const std::vector<bmpformat::ColorPixel>& watermark_grid,
-                          std::size_t mark_w, std::size_t mark_h,
-                          double alpha = 0.35, bool center = true) {
+bool ApplyWatermarkToGrid(
+    std::vector<bmpformat::ColorPixel>& base_grid, std::size_t base_w,
+    std::size_t base_h,
+    const std::vector<bmpformat::ColorPixel>& watermark_grid,
+    std::size_t mark_w, std::size_t mark_h, double alpha, bool center) {
   if (base_w == 0 || base_h == 0 || base_grid.size() < base_w * base_h) {
     std::cerr << "Base grid is empty or invalid\n";
     return false;
@@ -50,11 +56,7 @@ bool ApplyWatermarkToGrid(std::vector<bmpformat::ColorPixel>& base_grid,
     return false;
   }
 
-  if (alpha < 0.0) {
-    alpha = 0.0;
-  } else if (alpha > 1.0) {
-    alpha = 1.0;
-  }
+  alpha = NormalizeAlpha(alpha);
 
   if (mark_w > base_w || mark_h > base_h) {
     std::cout << "Watermark is larger than the base grid\n";
@@ -73,11 +75,15 @@ bool ApplyWatermarkToGrid(std::vector<bmpformat::ColorPixel>& base_grid,
 
   for (std::size_t y = 0; y < mark_h; ++y) {
     std::size_t target_y = start_y + y;
-    if (target_y >= base_h) break;
+    if (target_y >= base_h) {
+      break;
+    }
 
     for (std::size_t x = 0; x < mark_w; ++x) {
       std::size_t target_x = start_x + x;
-      if (target_x >= base_w) break;
+      if (target_x >= base_w) {
+        break;
+      }
 
       std::size_t base_idx = target_y * base_w + target_x;
       std::size_t mark_idx = y * mark_w + x;
@@ -91,8 +97,8 @@ bool ApplyWatermarkToGrid(std::vector<bmpformat::ColorPixel>& base_grid,
 }
 
 bool ApplyWatermark(bmpformat::BMPData& base_image,
-                    bmpformat::BMPData& watermark_image,
-                    double alpha = 0.35, bool center = true) {
+                    bmpformat::BMPData& watermark_image, double alpha,
+                    bool center) {
   int32_t base_w = base_image.GetWidth();
   int32_t base_h = base_image.GetHeight();
   int32_t mark_w = watermark_image.GetWidth();
