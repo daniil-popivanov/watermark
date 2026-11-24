@@ -41,6 +41,7 @@ namespace bmpformat {
         kWrongInput = -2,
         kFilenameNotBMP = -3,
         kCannotCreateFile = -4,
+        kCorruptedData = -5,
     };
     
     const uint16_t kSignature = 0x4D42;
@@ -54,6 +55,14 @@ namespace bmpformat {
         }
         
         uint32_t offset = 0;    // space before first pixel data from first byte
+        uint16_t signature_input;
+        std::fread(&signature_input, sizeof(uint16_t), 1, file);
+
+        if (signature_input != kSignature) {
+            std::cout << "Corrupted data!" << std::endl;
+            exit((int) BMPErrors::kCorruptedData);
+        }
+
         std::fseek(file, kFileHeaderDataOffset, SEEK_SET);
         std::fread(&offset, 4, 1, file);
 
@@ -93,6 +102,7 @@ namespace bmpformat {
         }
 
         const size_t rows_count = abs(this->height_);
+        size_t pixels_read = 0;
 
         for (size_t rows_read = 0; rows_read < rows_count; rows_read++) { // reading pixels to tablet
             int32_t row = rows_read;
@@ -112,6 +122,7 @@ namespace bmpformat {
 
                 ColorPixel cur_pixel = {pxl[kBluePos], pxl[kGreenPos], pxl[kRedPos]};
                 color_pixels[row * pixels_in_row + pixel] = cur_pixel;
+                pixels_read++;
             }
 
             std::fseek(file, padding_in_row, SEEK_CUR);
@@ -119,6 +130,12 @@ namespace bmpformat {
 
         this->height_ = std::abs(height_);
         this->width_ = std::abs(width_);
+
+        if (pixels_read != this->height_ * this->width_) {
+            std::cout << "Wrong pixels!" << std::endl;
+            exit((int) BMPErrors::kCorruptedData);
+        }
+
         fclose(file);
     };
 
