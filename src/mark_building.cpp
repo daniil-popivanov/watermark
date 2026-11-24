@@ -1,4 +1,4 @@
-#include "include/wmarkplacer/mark_building.hpp"
+#include "wmarkplacer/mark_building.hpp"
 
 #include <cstddef>
 #include <cstdint>

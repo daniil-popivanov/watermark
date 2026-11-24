@@ -42,6 +42,7 @@ namespace bmpformat {
         kFilenameNotBMP = -3,
         kCannotCreateFile = -4,
         kCorruptedData = -5,
+        kWrongSetArgs = -6,
     };
     
     const uint16_t kSignature = 0x4D42;
@@ -199,6 +200,12 @@ namespace bmpformat {
     void BMPData::SetParameters(int32_t width, int32_t height, uint16_t bit_depth, const std::vector<ColorPixel> &pixels) { // saving bmp variables inside code
         this->width_ = std::abs(width);
         this->height_ = std::abs(height);
+
+        if (pixels.size() != this->width_ * this->height_) {
+            std::cout << "Wrong args!" << std::endl;
+            exit((int) BMPErrors::kWrongSetArgs);
+        }
+
         this->bit_depth_ = bit_depth;
         this->pixels_ = pixels;
     }
