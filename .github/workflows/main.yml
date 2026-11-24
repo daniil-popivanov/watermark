@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BMP_DATA_SOURCE: internal/get_data.cpp
+      BMP_DATA_SOURCE: src/get_data.cpp
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUTF8: "1"
     steps:
@@ -51,7 +51,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     env:
-      BMP_DATA_SOURCE: internal/get_data.cpp
+      BMP_DATA_SOURCE: src/get_data.cpp
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUTF8: "1"
     steps:

@@ -1,6 +1,3 @@
-add_executable(
-    watermark
-    main.cpp
-)
+add_executable(${PROJECT_NAME} main.cpp)
 
-target_compile_features(hamarc PRIVATE cxx_std_23)
+target_link_libraries(${PROJECT_NAME} PRIVATE wmarkplacer)

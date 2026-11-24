@@ -12,7 +12,12 @@ CALL_TIMEOUT_SECONDS = 10
 
 
 def build_probe(build_directory):
-    source = Path(os.environ.get("BMP_DATA_SOURCE", PROJECT_ROOT / "internal/get_data.cpp"))
+    executable = os.environ.get("BMP_PROBE_EXECUTABLE")
+
+    if executable and not os.environ.get("BMP_DATA_SOURCE"):
+        return Path(executable)
+
+    source = Path(os.environ.get("BMP_DATA_SOURCE", PROJECT_ROOT / "src/get_data.cpp"))
 
     if not source.is_absolute():
         source = PROJECT_ROOT / source

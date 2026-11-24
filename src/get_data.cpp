@@ -1,193 +1,204 @@
 #include "wmarkplacer/get_data.h"
-#include <iostream>
-#include <cstring>
-#include <vector>
-#include <cstdint>
+
+#include <array>
 #include <filesystem>
-#include <cstdio>
-#include <cstdlib>
-
-enum {
-    kBitmapInfoHeaderSize = 40,
-    kBitmapInfoHeaderSizeOffset =14,
-    kInfoHeaderBitCountOffset = 14,
-    kInfoHeaderWidthOffset = 4,
-    kInfoHeaderHeightOffset = 8,
-
-    kRowAlign = 4,
-    kColorsCount = 3,
-    kBluePos = 0,
-    kGreenPos = 1,
-    kRedPos = 2,
-    
-    kBitmapFileHeader = 14,
-    kFileHeaderSizeOffset = 2,
-    kFileHeaderDataOffset = 10,
-    kFileWidthOffset = 18,
-    kFileHeightOffset = 22,
-    kFilePlanesOffset = 26,
-    kFileBitCountOffset = 28,
-
-    kPlanesCount = 1,
-    kXPpmOffset = 38,
-    kYPpmOffset = 42,
-    kByteSize = 8,
-    kLastByteMask = 0b11111111,
-};
+#include <fstream>
+#include <limits>
+#include <stdexcept>
 
 namespace bmpformat {
-    enum class BMPErrors {
-        kCannotOpenFile = -1,
-        kWrongInput = -2,
-        kFilenameNotBMP = -3,
-        kCannotCreateFile = -4,
-    };
-    
-    const uint16_t kSignature = 0x4D42;
+namespace {
 
-    void BMPData::Read(const char* filename) { // method reads .bmp file
-        FILE* file = fopen(filename, "rb");
-        
-        if (!file) {
-            std::cout << "Cannot open file!" << std::endl;
-            exit((int) BMPErrors::kCannotOpenFile);
-        }
-        
-        uint32_t offset = 0;    // space before first pixel data from first byte
-        std::fseek(file, kFileHeaderDataOffset, SEEK_SET);
-        std::fread(&offset, 4, 1, file);
+constexpr unsigned kFileHeaderSize = 14;
+constexpr unsigned kInfoHeaderSize = 40;
+constexpr unsigned kHeaderSize = kFileHeaderSize + kInfoHeaderSize;
+constexpr uint16_t kSignature = 0x4D42;
+constexpr uint16_t kBitDepth = 24;
+constexpr unsigned kAlignment = 4;
+constexpr unsigned kByteBits = 8;
+constexpr unsigned kSignatureOffset = 0;
+constexpr unsigned kFileSizeOffset = 2;
+constexpr unsigned kReservedOffset = 6;
+constexpr unsigned kDataOffset = 10;
+constexpr unsigned kWidthOffset = 18;
+constexpr unsigned kHeightOffset = 22;
+constexpr unsigned kPlanesOffset = 26;
+constexpr unsigned kDepthOffset = 28;
+constexpr unsigned kCompressionOffset = 30;
+constexpr unsigned kImageSizeOffset = 34;
+constexpr unsigned kXResolutionOffset = 38;
+constexpr unsigned kYResolutionOffset = 42;
 
-        if (std::fseek(file, kBitmapFileHeader, SEEK_SET) != 0) {
-            std::cout << "Cannot relocate pointer after fileheader!" << std::endl;
-            std::fclose(file);
-            exit((int) BMPErrors::kWrongInput);
-        }
+using Header = std::array<uint8_t, kHeaderSize>;
+static_assert(sizeof(ColorPixel) == 3);
 
-        uint8_t info_header[kBitmapInfoHeaderSize];
-        size_t bytes_read = fread(&info_header, 1, kBitmapInfoHeaderSize, file);
+template<class T>
+T ReadField(const Header& header, unsigned offset) {
+    uint32_t value = 0;
 
-        if (bytes_read < kBitmapInfoHeaderSize) {
-            std::cout << "Wrong BITMAPINFOHEADER" << std::endl;
-            std::fclose(file);
-            exit((int) BMPErrors::kWrongInput);
-        }
-
-        std::memcpy(&(*this).width_, &info_header[kInfoHeaderWidthOffset], sizeof(int32_t));   // getting width, higth and bit_depth from INFOHEADER
-        std::memcpy(&(*this).height_, &info_header[kInfoHeaderHeightOffset], sizeof(int32_t));
-        std::memcpy(&(*this).bit_depth_, &info_header[kInfoHeaderBitCountOffset], sizeof(uint16_t));
-        std::fseek(file, offset, SEEK_SET);    // relocate pointer to first pixel
-
-        uint32_t pixels_in_row = abs(this->width_); // pixels in row
-        uint32_t padding_in_row = 0;
-        bool is_bottom_up = false;
-
-        this->pixels_ = std::vector<ColorPixel> (pixels_in_row * abs((*this).height_));
-        std::vector<ColorPixel>& color_pixels = this->pixels_;
-
-        if ((pixels_in_row * kColorsCount) % kRowAlign != 0) {   // counting padding bytes in a row
-            padding_in_row = kRowAlign - ((pixels_in_row * kColorsCount) % kRowAlign);
-        }
-
-        if ((*this).height_ > 0) {
-            is_bottom_up = true;
-        }
-
-        const size_t rows_count = abs(this->height_);
-
-        for (size_t rows_read = 0; rows_read < rows_count; rows_read++) { // reading pixels to tablet
-            int32_t row = rows_read;
-
-            if (is_bottom_up) {
-                row = rows_count - 1 - row;
-            }
-
-            for (size_t pixel = 0; pixel < pixels_in_row; pixel++) {
-                uint8_t pxl[kColorsCount];
-                bytes_read = fread(&pxl, sizeof(uint8_t), kColorsCount, file);
-
-                if (bytes_read < kColorsCount) {
-                    std::fclose(file);
-                    exit((int) BMPErrors::kWrongInput);
-                }
-
-                ColorPixel cur_pixel = {pxl[kBluePos], pxl[kGreenPos], pxl[kRedPos]};
-                color_pixels[row * pixels_in_row + pixel] = cur_pixel;
-            }
-
-            std::fseek(file, padding_in_row, SEEK_CUR);
-        }
-
-        this->height_ = std::abs(height_);
-        this->width_ = std::abs(width_);
-        fclose(file);
-    };
-
-    void BMPData::Create(const char* filename, uint32_t ppm) { // method create .bmp file with parameters from class
-        std::filesystem::path file_path(filename);
-
-        if (file_path.extension() != ".bmp") { // check for correct extension
-            std::cout << "Wrong file extension!" << std::endl;
-            exit((int) BMPErrors::kFilenameNotBMP);
-        }
-
-        uint32_t headers_size = kBitmapFileHeader + kBitmapInfoHeaderSize;
-        uint32_t row_size = (((*this).bit_depth_ * abs((*this).width_) + 31) / 32) * 4;
-        uint32_t file_size = headers_size + row_size * abs((*this).height_);
-        uint32_t pixels_in_row = abs(this->width_);
-        uint32_t offset = headers_size;
-        std::vector<uint8_t> new_file_bytes(file_size, 0);
-
-        std::memcpy(new_file_bytes.data(), &kSignature, sizeof(uint16_t));
-        new_file_bytes[kBitmapInfoHeaderSizeOffset] = kBitmapInfoHeaderSize;
-        new_file_bytes[kFilePlanesOffset] = kPlanesCount;
-
-        // next three 'for' write data to .bmp file
-
-        for (size_t i = 0; i < 4; i++) {
-            new_file_bytes[kFileHeaderSizeOffset + i] = (file_size >> kByteSize * i) & kLastByteMask;
-            new_file_bytes[kFileHeaderDataOffset + i] = (offset >> kByteSize * i) & kLastByteMask;
-            new_file_bytes[kFileWidthOffset + i] = ((*this).width_ >> kByteSize * i) & kLastByteMask;
-            new_file_bytes[kFileHeightOffset + i] = ((*this).height_ >> kByteSize * i) & kLastByteMask;
-            new_file_bytes[kXPpmOffset + i] = (ppm >> kByteSize * i) & kLastByteMask;
-            new_file_bytes[kYPpmOffset + i] = (ppm >> kByteSize * i) & kLastByteMask;
-        }
-
-        for (size_t i = 0; i < 2; i++) {
-            new_file_bytes[kFileBitCountOffset + i] = ((*this).bit_depth_ >> kByteSize * i) & kLastByteMask;
-        }
-
-        const size_t rows_count = std::abs(this->height_);
-
-        for (size_t row = 0; row < rows_count; row++) { // writing pixels to file
-            size_t src = rows_count - (1 + row); // takes current pixel for bottom-up
-
-            for (size_t cur_pixel = 0; cur_pixel < pixels_in_row; cur_pixel++) {
-                new_file_bytes[offset + row_size * row + cur_pixel * kColorsCount + kBluePos] = (*this).pixels_[pixels_in_row * src + cur_pixel].blue;
-                new_file_bytes[offset + row_size * row + cur_pixel * kColorsCount + kGreenPos] = (*this).pixels_[pixels_in_row * src + cur_pixel].green;
-                new_file_bytes[offset + row_size * row + cur_pixel * kColorsCount + kRedPos] = (*this).pixels_[pixels_in_row * src + cur_pixel].red;
-            }
-        }
-
-        FILE* file = fopen(filename, "wb");
-
-        if (!file) {
-            std::cout << "Cannot create file!" << std::endl;
-            exit((int) BMPErrors::kCannotCreateFile);
-        }
-
-        std::fwrite(new_file_bytes.data(), sizeof(uint8_t), file_size, file);
-        std::fclose(file);
-    };
-
-    void BMPData::SetParameters(int32_t width, int32_t height, uint16_t bit_depth, const std::vector<ColorPixel> &pixels) { // saving bmp variables inside code
-        this->width_ = std::abs(width);
-        this->height_ = std::abs(height);
-        this->bit_depth_ = bit_depth;
-        this->pixels_ = pixels;
+    for (unsigned i = 0; i < sizeof(T); ++i) {
+        value |= static_cast<uint32_t>(header[offset + i]) << (kByteBits * i);
     }
 
-    int32_t BMPData::GetWidth() { return this->width_; }
-    int32_t BMPData::GetHeight() { return this->height_; }
-    uint16_t BMPData::GetBitDepth() { return this->bit_depth_; }
-    const std::vector <ColorPixel>& BMPData::GetPixels() { return this->pixels_; }
-} // namespace bmpformat
+    return static_cast<T>(value);
+}
+
+template<class T>
+void WriteField(Header& header, unsigned offset, T value) {
+    for (unsigned i = 0; i < sizeof(T); ++i) {
+        header[offset + i] = static_cast<uint8_t>(value >> (kByteBits * i));
+    }
+}
+
+uint64_t RowSize(int32_t width) {
+    const uint64_t bytes = static_cast<uint64_t>(width) * sizeof(ColorPixel);
+    return (bytes + kAlignment - 1) / kAlignment * kAlignment;
+}
+
+uint32_t ImageSize(int32_t width, int32_t height, uint16_t depth) {
+    if (width <= 0 || height <= 0 || depth != kBitDepth) {
+        throw std::invalid_argument("Expected a 24-bit BMP with positive dimensions");
+    }
+
+    const uint64_t bytes = RowSize(width) * static_cast<uint32_t>(height);
+
+    if (bytes > std::numeric_limits<uint32_t>::max() - kHeaderSize) {
+        throw std::invalid_argument("Image exceeds the BMP size limit");
+    }
+
+    return static_cast<uint32_t>(bytes);
+}
+
+}
+
+void BMPData::Read(const char* filename) {
+    if (filename == nullptr) {
+        throw std::invalid_argument("Missing input filename");
+    }
+
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+
+    if (!file) {
+        throw std::runtime_error("Cannot open BMP file");
+    }
+
+    const std::streamoff length = file.tellg();
+    Header header{};
+    file.seekg(0);
+
+    if (!file.read(reinterpret_cast<char*>(header.data()), header.size())) {
+        throw std::runtime_error("Incomplete BMP header");
+    }
+
+    if (ReadField<uint16_t>(header, kSignatureOffset) != kSignature || ReadField<uint32_t>(header, kFileHeaderSize) != kInfoHeaderSize) {
+        throw std::invalid_argument("Invalid BMP header");
+    }
+
+    if (ReadField<uint16_t>(header, kPlanesOffset) != 1 || ReadField<uint32_t>(header, kCompressionOffset) != 0 || ReadField<uint32_t>(header, kReservedOffset) != 0) {
+        throw std::invalid_argument("Unsupported BMP format");
+    }
+
+    const uint32_t raw_width = ReadField<uint32_t>(header, kWidthOffset);
+    const uint32_t raw_height = ReadField<uint32_t>(header, kHeightOffset);
+    const bool top_down = raw_height > std::numeric_limits<int32_t>::max();
+    const uint32_t rows = top_down ? 0u - raw_height : raw_height;
+
+    if (raw_width > std::numeric_limits<int32_t>::max() || rows > std::numeric_limits<int32_t>::max()) {
+        throw std::invalid_argument("Invalid BMP dimensions");
+    }
+
+    const auto width = static_cast<int32_t>(raw_width);
+    const auto height = static_cast<int32_t>(rows);
+    const auto depth = ReadField<uint16_t>(header, kDepthOffset);
+    const uint32_t image_size = ImageSize(width, height, depth);
+    const auto offset = ReadField<uint32_t>(header, kDataOffset);
+    const auto declared_size = ReadField<uint32_t>(header, kImageSizeOffset);
+
+    if (length != ReadField<uint32_t>(header, kFileSizeOffset) || offset < kHeaderSize || static_cast<int64_t>(offset) + image_size > length) {
+        throw std::invalid_argument("Invalid BMP file size or pixel offset");
+    }
+
+    if (declared_size != 0 && declared_size != image_size) {
+        throw std::invalid_argument("Incorrect pixel data size");
+    }
+
+    std::vector<ColorPixel> pixels(static_cast<std::size_t>(raw_width) * rows);
+    const auto row_bytes = static_cast<std::streamsize>(width) * static_cast<std::streamsize>(sizeof(ColorPixel));
+    const auto padding = static_cast<std::streamsize>(RowSize(width)) - row_bytes;
+    std::array<char, kAlignment> pad{};
+    file.seekg(offset);
+
+    for (uint32_t y = 0; y < rows; ++y) {
+        const std::size_t row = top_down ? y : rows - 1 - y;
+        auto* dest = reinterpret_cast<char*>(pixels.data() + row * raw_width);
+
+        if (!file.read(dest, row_bytes) || !file.read(pad.data(), padding)) {
+            throw std::runtime_error("Incomplete BMP row");
+        }
+    }
+
+    pixels_.swap(pixels);
+    width_ = width;
+    height_ = height;
+    bit_depth_ = depth;
+}
+
+void BMPData::Create(const char* filename, uint32_t ppm) {
+    if (filename == nullptr || std::filesystem::path(filename).extension() != ".bmp") {
+        throw std::invalid_argument("Expected .bmp output");
+    }
+
+    const uint32_t image_size = ImageSize(width_, height_, bit_depth_);
+
+    if (pixels_.size() != static_cast<uint64_t>(width_) * static_cast<uint32_t>(height_)) {
+        throw std::invalid_argument("Pixel count does not match dimensions");
+    }
+
+    Header header{};
+    WriteField(header, kSignatureOffset, kSignature);
+    WriteField(header, kFileSizeOffset, uint32_t{kHeaderSize + image_size});
+    WriteField(header, kDataOffset, uint32_t{kHeaderSize});
+    WriteField(header, kFileHeaderSize, uint32_t{kInfoHeaderSize});
+    WriteField(header, kWidthOffset, static_cast<uint32_t>(width_));
+    WriteField(header, kHeightOffset, static_cast<uint32_t>(height_));
+    WriteField(header, kPlanesOffset, uint16_t{1});
+    WriteField(header, kDepthOffset, bit_depth_);
+    WriteField(header, kImageSizeOffset, image_size);
+    WriteField(header, kXResolutionOffset, ppm);
+    WriteField(header, kYResolutionOffset, ppm);
+
+    std::ofstream file(filename, std::ios::binary);
+    file.exceptions(std::ios::badbit | std::ios::failbit);
+    file.write(reinterpret_cast<const char*>(header.data()), header.size());
+    const auto row_bytes = static_cast<std::streamsize>(width_) * static_cast<std::streamsize>(sizeof(ColorPixel));
+    const auto padding = static_cast<std::streamsize>(RowSize(width_)) - row_bytes;
+    const std::array<char, kAlignment> pad{};
+
+    for (int32_t y = height_; y > 0; --y) {
+        const ColorPixel* row = pixels_.data() + static_cast<std::size_t>(y - 1) * static_cast<uint32_t>(width_);
+        file.write(reinterpret_cast<const char*>(row), row_bytes);
+        file.write(pad.data(), padding);
+    }
+
+    file.close();
+}
+
+void BMPData::SetParameters(int32_t width, int32_t height, uint16_t bit_depth, const std::vector<ColorPixel>& pixels) {
+    ImageSize(width, height, bit_depth);
+
+    if (pixels.size() != static_cast<uint64_t>(width) * static_cast<uint32_t>(height)) {
+        throw std::invalid_argument("Pixel count does not match dimensions");
+    }
+
+    pixels_ = pixels;
+    width_ = width;
+    height_ = height;
+    bit_depth_ = bit_depth;
+}
+
+int32_t BMPData::GetWidth() { return width_; }
+int32_t BMPData::GetHeight() { return height_; }
+uint16_t BMPData::GetBitDepth() { return bit_depth_; }
+const std::vector<ColorPixel>& BMPData::GetPixels() { return pixels_; }
+
+}
