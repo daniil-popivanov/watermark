@@ -1,11 +1,11 @@
+#include "wmarkplacer/get_data.h"
 #include <iostream>
-#include <fstream>
 #include <cstring>
 #include <vector>
 #include <cstdint>
-#include <cmath>
 #include <filesystem>
-#include "wmarkplacer/get_data.h"
+#include <cstdio>
+#include <cstdlib>
 
 enum {
     kBitmapInfoHeaderSize = 40,
@@ -125,7 +125,7 @@ namespace bmpformat {
     void BMPData::Create(const char* filename, uint32_t ppm) { // method create .bmp file with parameters from class
         std::filesystem::path file_path(filename);
 
-        if (std::strcmp(file_path.extension().c_str(), ".bmp") != 0) { // check for correct extension
+        if (file_path.extension() != ".bmp") { // check for correct extension
             std::cout << "Wrong file extension!" << std::endl;
             exit((int) BMPErrors::kFilenameNotBMP);
         }
