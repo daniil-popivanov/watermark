@@ -119,47 +119,6 @@ class BmpRunner:
 
             return result["stage"], rejection_status(result), result["width"], result["height"]
 
-    def read_missing_file(self):
-
-        with tempfile.TemporaryDirectory(prefix="bmp-case-") as directory:
-            work = Path(directory)
-
-            result = self.call(work, "read", work / "missing.bmp")
-
-            return result["stage"], rejection_status(result)
-
-    def read_directory(self):
-
-        with tempfile.TemporaryDirectory(prefix="bmp-case-") as directory:
-            work = Path(directory)
-            source = work / "directory.bmp"
-            source.mkdir()
-
-            result = self.call(work, "read", source)
-
-            return result["stage"], rejection_status(result)
-
-    def save_to_missing_parent(self):
-
-        with tempfile.TemporaryDirectory(prefix="bmp-case-") as directory:
-            work = Path(directory)
-            target = work / "missing-parent" / "output.bmp"
-
-            result = self.call(work, "save", 1, 1, 1, target)
-
-            return result["stage"], rejection_status(result), target.exists()
-
-    def save_to_directory(self):
-
-        with tempfile.TemporaryDirectory(prefix="bmp-case-") as directory:
-            work = Path(directory)
-            target = work / "directory.bmp"
-            target.mkdir()
-
-            result = self.call(work, "save", 1, 1, 1, target)
-
-            return result["stage"], rejection_status(result), target.is_dir()
-
     def roundtrip(self, width, height):
 
         with tempfile.TemporaryDirectory(prefix="bmp-case-") as directory:

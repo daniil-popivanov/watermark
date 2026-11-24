@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace bmpformat {
@@ -18,6 +19,8 @@ namespace bmpformat {
         public:
             void Read(const char* filename); // method reads .bmp file
             void Create(const char* filename, uint32_t ppm); // method create .bmp file with parameters from class
+            bool TryRead(const char* filename, std::string& error);
+            bool TryCreate(const char* filename, uint32_t ppm, std::string& error);
             void SetParameters(int32_t width, int32_t height, uint16_t bit_depth, const std::vector<ColorPixel> &pixels); // saving bmp variables inside code
             int32_t GetWidth();
             int32_t GetHeight();

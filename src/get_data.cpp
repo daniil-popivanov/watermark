@@ -1,6 +1,7 @@
 #include "wmarkplacer/get_data.h"
 
 #include <array>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -181,6 +182,26 @@ void BMPData::Create(const char* filename, uint32_t ppm) {
     }
 
     file.close();
+}
+
+bool BMPData::TryRead(const char* filename, std::string& error) {
+    try {
+        Read(filename);
+        return true;
+    } catch (const std::exception& failure) {
+        error = failure.what();
+        return false;
+    }
+}
+
+bool BMPData::TryCreate(const char* filename, uint32_t ppm, std::string& error) {
+    try {
+        Create(filename, ppm);
+        return true;
+    } catch (const std::exception& failure) {
+        error = failure.what();
+        return false;
+    }
 }
 
 void BMPData::SetParameters(int32_t width, int32_t height, uint16_t bit_depth, const std::vector<ColorPixel>& pixels) {

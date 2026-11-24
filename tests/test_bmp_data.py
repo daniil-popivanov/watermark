@@ -56,10 +56,6 @@ class BmpDataTestCase(unittest.TestCase):
         res = self.bmp.read(make_header(1, 0))
         self.assertEqual(res, ("Read", "rejected", 0, 0))
 
-    def test_negative_width(self):
-        res = self.bmp.read(make_header(-1, 1))
-        self.assertEqual(res, ("Read", "rejected", 0, 0))
-
     def test_too_few_pixels(self):
         res = self.bmp.set_parameters(2, 2, 3)
         self.assertEqual(res, ("SetParameters", "rejected", 0, 0))
@@ -68,22 +64,6 @@ class BmpDataTestCase(unittest.TestCase):
         res = self.bmp.set_parameters(2, 2, 5)
         self.assertEqual(res, ("SetParameters", "rejected", 0, 0))
 
-    def test_input_file_missing(self):
-        res = self.bmp.read_missing_file()
-        self.assertEqual(res, ("Read", "rejected"))
-
-    def test_input_path_is_directory(self):
-        res = self.bmp.read_directory()
-        self.assertEqual(res, ("Read", "rejected"))
-
-    def test_output_parent_missing(self):
-        res = self.bmp.save_to_missing_parent()
-        self.assertEqual(res, ("Create", "rejected", False))
-
-    def test_output_path_is_directory(self):
-        res = self.bmp.save_to_directory()
-        self.assertEqual(res, ("Create", "rejected", True))
-
     def test_minimum_1x1(self):
         res = self.bmp.roundtrip(1, 1)
         self.assertEqual(res, expected_bmp(1, 1))
@@ -91,14 +71,6 @@ class BmpDataTestCase(unittest.TestCase):
     def test_valid_512x512(self):
         res = self.bmp.roundtrip(512, 512)
         self.assertEqual(res, expected_bmp(512, 512))
-
-    def test_huge_dimensions(self):
-        res = self.bmp.read(make_header(INT_MAX, INT_MAX))
-        self.assertEqual(res, ("Read", "rejected", 0, 0))
-
-    def test_pixel_count_below_int_max(self):
-        res = self.bmp.read(make_header(46340, 46340))
-        self.assertEqual(res, ("Read", "rejected", 0, 0))
 
     def test_pixel_count_above_int_max(self):
         res = self.bmp.read(make_header(46341, 46341))

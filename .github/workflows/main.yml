@@ -30,7 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BMP_DATA_SOURCE: src/get_data.cpp
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUTF8: "1"
     steps:
@@ -42,16 +41,18 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+      - name: Configure CMake
+        run: cmake -S . -B build
+      - name: Build project
+        run: cmake --build build --config Release
       - name: Run tests
-        run: |
-          python -m unittest tests/test_bmp_data.py
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
 
   test_windows:
     needs: lint
     runs-on: windows-latest
     timeout-minutes: 10
     env:
-      BMP_DATA_SOURCE: src/get_data.cpp
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUTF8: "1"
     steps:
@@ -63,6 +64,9 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+      - name: Configure CMake
+        run: cmake -S . -B build
+      - name: Build project
+        run: cmake --build build --config Release
       - name: Run tests
-        run: |
-          python -m unittest tests/test_bmp_data.py
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
